@@ -1959,6 +1959,7 @@ class Llama:
         logit_bias: Optional[Dict[int, float]] = None,
         logprobs: Optional[bool] = None,
         top_logprobs: Optional[int] = None,
+        action_guard: Optional["ActionGuard"] = None,
     ) -> Union[
         CreateChatCompletionResponse, Iterator[CreateChatCompletionStreamResponse]
     ]:
@@ -2006,6 +2007,7 @@ class Llama:
             functions=functions,
             function_call=function_call,
             tools=tools,
+            action_guard=action_guard,
             tool_choice=tool_choice,
             temperature=temperature,
             top_p=top_p,

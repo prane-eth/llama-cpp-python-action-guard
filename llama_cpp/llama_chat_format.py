@@ -102,6 +102,7 @@ class LlamaChatCompletionHandler(Protocol):
         grammar: Optional[llama.LlamaGrammar] = None,
         logprobs: Optional[bool] = None,
         top_logprobs: Optional[int] = None,
+        action_guard: Optional[llama_types.ActionGuard] = None,
         **kwargs,  # type: ignore
     ) -> Union[
         llama_types.CreateChatCompletionResponse,
@@ -588,6 +589,7 @@ def chat_formatter_to_chat_completion_handler(
         logit_bias: Optional[Dict[str, float]] = None,
         logprobs: Optional[bool] = None,
         top_logprobs: Optional[int] = None,
+        action_guard: Optional[llama_types.ActionGuard] = None,
         **kwargs,  # type: ignore
     ) -> Union[
         llama_types.CreateChatCompletionResponse,
@@ -599,6 +601,7 @@ def chat_formatter_to_chat_completion_handler(
             function_call=function_call,
             tools=tools,
             tool_choice=tool_choice,
+            action_guard=action_guard,
         )
         prompt = llama.tokenize(
             result.prompt.encode("utf-8"),
@@ -693,6 +696,26 @@ def chat_formatter_to_chat_completion_handler(
         )
         if tool is not None:
             tool_name = tool["function"]["name"]
+            # If not streaming, we can validate the produced tool call with action_guard
+            if not stream and action_guard is not None:
+                completion = completion_or_chunks  # type: ignore
+                # Construct the prospective tool_call for validation
+                tool_id = "call_" + "_0_" + tool_name + "_" + completion["id"]
+                prospective_tool_call = {
+                    "id": tool_id,
+                    "type": "function",
+                    "function": {
+                        "name": tool_name,
+                        "arguments": completion["choices"][0]["text"],
+                    },
+                }
+                try:
+                    decision = action_guard(prospective_tool_call)
+                except Exception:
+                    raise ValueError("action_guard raised an exception")
+                if decision == llama_types.GuardDecision.BLOCK:
+                    raise ValueError("Tool call blocked by action_guard")
+
             return _convert_completion_to_chat_function(
                 tool_name, completion_or_chunks, stream
             )
@@ -1784,6 +1807,7 @@ def functionary_v1_v2_chat_handler(
     model: Optional[str] = None,
     logits_processor: Optional[llama.LogitsProcessorList] = None,
     grammar: Optional[llama.LlamaGrammar] = None,
+    action_guard: Optional[llama_types.ActionGuard] = None,
     **kwargs,  # type: ignore
 ) -> Union[llama_types.ChatCompletion, Iterator[llama_types.ChatCompletionChunk]]:
     SYSTEM_MESSAGE = """A chat between a curious user and an artificial intelligence assistant. The assistant gives helpful, detailed, and polite answers to the user's questions. The assistant calls functions with appropriate input when necessary"""
@@ -2617,6 +2641,16 @@ def functionary_v1_v2_chat_handler(
                     },
                 }
             )
+
+        # Run action_guard if provided and block if any tool call is denied
+        if action_guard is not None and len(tool_calls) > 0:
+            for tc in tool_calls:
+                try:
+                    decision = action_guard(tc)
+                except Exception:
+                    raise ValueError("action_guard raised an exception")
+                if decision == llama_types.GuardDecision.BLOCK:
+                    raise ValueError("Tool call blocked by action_guard")
 
         # TODO: support stream mode
         function_call_dict: Union[

@@ -366,6 +366,33 @@ Chat completion is available through the [`create_chat_completion`](https://llam
 
 For OpenAI API v1 compatibility, you use the [`create_chat_completion_openai_v1`](https://llama-cpp-python.readthedocs.io/en/latest/api-reference/#llama_cpp.Llama.create_chat_completion_openai_v1) method which will return pydantic models instead of dicts.
 
+#### Action Guard (Tool Call Validation)
+
+This package supports an optional `action_guard` parameter on chat completion calls that centralizes validation of proposed tool calls (function/tool actions) before they are executed.
+
+The `action_guard` is a callable that receives a proposed tool call (a dict) and returns a `GuardDecision` (`ALLOW` or `BLOCK`) defined in `llama_cpp.llama_types`. If the guard returns `BLOCK`, the action is prevented and the chat completion call raises a `ValueError`.
+
+Simple example:
+
+```python
+from llama_cpp import Llama
+import llama_cpp.llama_types as types
+
+def my_guard(tool_call):
+  # Block any call to tools named 'dangerous'
+  if tool_call.get("function", {}).get("name") == "dangerous":
+    return types.GuardDecision.BLOCK
+  return types.GuardDecision.ALLOW
+
+llm = Llama(model_path="/path/to/model", chat_format="chatml-function-calling")
+llm.create_chat_completion(
+  messages=[{"role": "user", "content": "Call a tool"}],
+  tools=[{"type":"function","function":{"name":"safe","parameters":{}}}],
+  tool_choice={"type":"function","function":{"name":"safe"}},
+  action_guard=my_guard,
+)
+```
+
 
 ### JSON and JSON Schema Mode
 

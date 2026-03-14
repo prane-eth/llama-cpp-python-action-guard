@@ -7,8 +7,9 @@ https://github.com/openai/openai-openapi/blob/master/openapi.yaml
 
 """
 
-from typing import Any, List, Optional, Dict, Union
+from typing import Any, List, Optional, Dict, Union, Callable
 from typing_extensions import TypedDict, NotRequired, Literal
+from enum import Enum
 
 
 # NOTE: Defining this correctly using annotations seems to break pydantic validation.
@@ -295,6 +296,14 @@ class ChatCompletionNamedToolChoice(TypedDict):
 ChatCompletionToolChoiceOption = Union[
     Literal["none", "auto", "required"], ChatCompletionNamedToolChoice
 ]
+
+
+class GuardDecision(Enum):
+    ALLOW = "allow"
+    BLOCK = "block"
+
+
+ActionGuard = Callable[[ChatCompletionMessageToolCall], GuardDecision]
 
 
 # NOTE: The following type names are not part of the OpenAI OpenAPI specification
